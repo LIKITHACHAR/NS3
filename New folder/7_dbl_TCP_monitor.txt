@@ -1,0 +1,24 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/flow-monitor-helper.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    // ... (topology and TCP configuration as in previous responses)
+
+    // Flow monitor configuration
+    FlowMonitorHelper flowMonitorHelper;
+    Ptr<FlowMonitor> flowMonitor = flowMonitorHelper.InstallAll();
+
+    Simulator::Run();
+
+    flowMonitor->CheckForLostPackets();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowMonitorHelper.GetClassifier());
+    flowMonitor->SerializeToXmlFile("flow.xml", true, true);
+
+    // ... (rest of the code)
+}

@@ -1,0 +1,45 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/internet-module.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    NodeContainer clients, servers, routers;
+    clients.Create(2);
+    servers.Create(2);
+    routers.Create(2);
+
+    PointToPointHelper pointToPoint;
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+    pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
+
+    // Connect clients to router n1
+    NetDeviceContainer clientDevices = pointToPoint.Install(clients, routers.Get(0));
+
+    // Connect servers to router n2
+    NetDeviceContainer serverDevices = pointToPoint.Install(servers, routers.Get(1));
+
+    // Connect routers n1 and n2
+    NetDeviceContainer routerDevices = pointToPoint.Install(routers);
+
+    InternetStackHelper stack;
+    stack.Install(clients);
+    stack.Install(servers);
+    stack.Install(routers);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    address.Assign(clientDevices);
+    address.SetBase("10.1.2.0", "255.255.255.0");
+    address.Assign(serverDevices);
+    address.SetBase("10.1.3.0", "255.255.255.0");
+    address.Assign(routerDevices);
+
+    // You can now install applications on clients and servers to generate traffic
+
+    Simulator::Run();
+    Simulator::Destroy();
+    return 0;
+}

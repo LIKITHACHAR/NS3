@@ -1,0 +1,38 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/wifi-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/olsr-helper.h"
+#include "ns3/applications-module.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    NodeContainer nodes;
+    nodes.Create(3); // Create 3 nodes
+
+    // ... (network setup, mobility, and OLSR configuration)
+
+    // Get IP addresses for n1 and n2
+    Ipv4Address n1Address = address.GetAddress(1);
+    Ipv4Address n2Address = address.GetAddress(2);
+
+    // UDP server (on node n2)
+    UdpServerHelper server(9); // Use port 9
+    ApplicationContainer serverApps = server.Install(nodes.Get(2));
+    serverApps.Start(Seconds(1.0));
+    serverApps.Stop(Seconds(10.0));
+
+    // UDP client (on node n1)
+    OnOffHelper onoff("ns3::UdpSocketFactory", Address(InetSocketAddress(n2Address, 9)));
+    onoff.SetConstantRate(DataRate("1Mbps"));
+    onoff.SetAttribute("PacketSize", UintegerValue(1024));
+    ApplicationContainer clientApps = onoff.Install(nodes.Get(1));
+    clientApps.Start(Seconds(2.0));
+    clientApps.Stop(Seconds(10.0));
+
+    Simulator::Run();
+    Simulator::Destroy();
+    return 0;
+}

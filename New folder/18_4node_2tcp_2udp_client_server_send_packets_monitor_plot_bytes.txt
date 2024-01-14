@@ -1,0 +1,56 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/flow-monitor-module.h"
+#include "ns3/gnuplot.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    // ... (previous code)
+
+    // Flow monitor
+    FlowMonitorHelper flowmon;
+    Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+
+    Simulator::Stop(Seconds(10.0));
+    Simulator::Run();
+
+    monitor->CheckForLostPackets();
+
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowmon.GetClassifier());
+    FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats();
+
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.end(); ++i) {
+        Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
+        std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+        std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+        std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+        // ... (other flow stats)
+    }
+
+    // Plot the received bytes
+    Gnuplot plot = Gnuplot("flow-bytes.png");
+    plot.SetTitle("Received Bytes");
+    plot.SetTerminal("png");
+    plot.SetLegend("TCP", "UDP");
+
+    std::vector<double> tcpRxBytes, udpRxBytes;
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.end(); ++i) {
+        Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
+        if (t.destinationPort == 9) {  // TCP flow
+            tcpRxBytes.push_back(i->second.rxBytes);
+        } else if (t.destinationPort == 10) {  // UDP flow
+            udpRxBytes.push_back(i->second.rxBytes);
+        }
+    }
+
+    plot.AddDataset(tcpRxBytes).SetStyle("linespoints").SetTitle("TCP");
+    plot.AddDataset(udpRxBytes).SetStyle("linespoints").SetTitle("UDP");
+    plot.Plot();
+
+    Simulator::Destroy();
+    return 0;
+}

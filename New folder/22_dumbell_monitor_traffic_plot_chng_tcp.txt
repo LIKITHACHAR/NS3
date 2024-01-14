@@ -1,0 +1,103 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/tcp-socket-factory.h"
+#include "ns3/packet-sink-helper.h"
+#include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/flow-monitor-module.h"
+#include "ns3/gnuplot.h"
+
+using namespace ns3;
+
+NS_LOG_COMPONENT_DEFINE("DumbbellTopology");
+
+int main(int argc, char *argv[]) {
+  // Create nodes
+  NodeContainer clientNodes, serverNodes, routers;
+  clientNodes.Create(2);
+  serverNodes.Create(2);
+  routers.Create(2);
+
+  // Create point-to-point links
+  PointToPointHelper pointToPoint;
+  pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+  pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
+
+  NetDeviceContainer clientDevices, routerDevices, serverDevices;
+  clientDevices = pointToPoint.Install(clientNodes, routers.Get(0));
+  serverDevices = pointToPoint.Install(routers.Get(1), serverNodes);
+  routerDevices = pointToPoint.Install(routers);
+
+  // Install Internet stack
+  InternetStackHelper internet;
+  internet.Install(clientNodes);
+  internet.Install(serverNodes);
+  internet.Install(routers);
+
+  // Assign IP addresses
+  Ipv4AddressHelper ipv4;
+  ipv4.SetBase("10.1.1.0", "255.255.255.0");
+  Ipv4InterfaceContainer clientInterfaces = ipv4.Assign(clientDevices);
+  ipv4.SetBase("10.1.2.0", "255.255.255.0");
+  Ipv4InterfaceContainer routerInterfaces = ipv4.Assign(routerDevices);
+  ipv4.SetBase("10.1.3.0", "255.255.255.0");
+  Ipv4InterfaceContainer serverInterfaces = ipv4.Assign(serverDevices);
+
+  // Enable routing
+  Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+  // Install TCP applications
+  uint16_t port = 9;
+  OnOffHelper onoff("ns3::TcpSocketFactory", Address(InetSocketAddress(serverInterfaces.GetAddress(0), port)));
+  onoff.SetAttribute("OnTime", StringValue("10s"));
+  onoff.SetAttribute("OffTime", StringValue("0s"));
+  onoff.SetAttribute("DataRate", StringValue("4Mbps"));
+
+  ApplicationContainer clientApps = onoff.Install(clientNodes.Get(0));
+  clientApps.Start(Seconds(1.0));
+  clientApps.Stop(Seconds(11.0));
+
+  // Install packet sinks
+  PacketSinkHelper packetSinkHelper("ns3::TcpSocketFactory", Address(InetSocketAddress(Ipv4Address::GetAny(), port)));
+  ApplicationContainer sinkApps = packetSinkHelper.Install(serverNodes);
+  sinkApps.Start(Seconds(0.0));
+  sinkApps.Stop(Seconds(12.0));
+
+  // Enable flow monitoring
+  Ptr<FlowMonitor> flowMonitor = FlowMonitorHelper::InstallAll();
+
+  // Enable TCP tracing
+  AsciiTraceHelper ascii;
+  pointToPoint.EnableAsciiAll(ascii.CreateFileStream("tcp-window-size.tr"));
+
+  // Run the simulation
+  Simulator::Run();
+
+  // Collect flow statistics
+  flowMonitor->CheckForLostPackets();
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowMonitor->GetClassifier());
+  FlowMonitor::FlowStatsContainer stats = flowMonitor->GetFlowStats();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.    Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
+    std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+    std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+    std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+    std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+    std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+    std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()) / 1024 / 1024 << " Mbps\n";
+  }
+
+  // Process TCP trace file to plot window size
+  Gnuplot gnuplot = Gnuplot();
+  gnuplot.SetTerminal("x11");
+  gnuplot.SetTitle("TCP Window Size");
+  gnuplot.SetXlabel("Time (s)");
+  gnuplot.SetYlabel("Window Size (bytes)");
+  gnuplot.PlotFile("tcp-window-size.tr", "using 1:5 title 'TCP Window Size' with lines");
+
+  Simulator::Destroy();
+  return 0;
+}
+

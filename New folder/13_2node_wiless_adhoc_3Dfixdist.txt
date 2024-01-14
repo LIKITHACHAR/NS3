@@ -1,0 +1,44 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/wifi-module.h"
+#include "ns3/internet-module.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    NodeContainer nodes;
+    nodes.Create(2); // Create 2 nodes
+
+    YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
+    YansWifiPhyHelper phy = YansWifiPhyHelper::Default();
+    phy.SetChannel(channel.Create());
+
+    WifiHelper wifi = WifiHelper::Default();
+    wifi.SetRemoteStationManager("ns3::AarfWifiManager");
+
+    WifiMacHelper mac = WifiMacHelper::Default();
+    Ssid ssid = Ssid("ns3-test");
+    mac.SetType("ns3::AdhocWifiMac", "Ssid", SsidValue(ssid));
+
+    NetDeviceContainer devices = wifi.Install(phy, mac, nodes);
+
+    MobilityHelper mobility;
+    mobility.SetPositionAllocator("ns3::GridPositionAllocator",
+                                  "MinX", DoubleValue(0.0),
+                                  "MinY", DoubleValue(0.0),
+                                  "MinZ", DoubleValue(0.0), // Set initial Z position
+                                  "DeltaX", DoubleValue(10.0), // 10 meters apart
+                                  "DeltaY", DoubleValue(0.0),
+                                  "DeltaZ", DoubleValue(0.0),
+                                  "GridWidth", UintegerValue(2),
+                                  "LayoutType", StringValue("RowFirst"));
+    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel"); // Fixed positions
+    mobility.Install(nodes);
+
+    // ... (install internet stack and applications)
+
+    Simulator::Run();
+    Simulator::Destroy();
+    return 0;
+}

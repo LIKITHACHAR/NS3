@@ -1,0 +1,70 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/wifi-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/olsr-helper.h"
+#include "ns3/applications-module.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/gnuplot.h"
+
+using namespace ns3;
+
+// Function to plot received bytes vs time
+void PlotReceivedBytes(Ptr<FlowMonitor> flowMonitor, uint32_t flowId) {
+    Gnuplot gnuplot = Gnuplot("ReceivedBytesVsTime");
+    gnuplot.SetTerminal("png");
+    gnuplot.SetTitle("Received Bytes vs Time");
+    gnuplot.SetXlabel("Time (Seconds)");
+    gnuplot.SetYlabel("Received Bytes");
+
+    std::ofstream plotFile("received_bytes.plt");
+    plotFile << "set xrange [0:" << Simulator::Now().GetSeconds() << "]\n";
+    plotFile << "plot '-' using 1:2 with lines title 'Received Bytes'\n";
+
+    Time lastRxTime = Seconds(0);
+    uint64_t lastRxBytes = 0;
+    for (FlowMonitor::FlowStats flowStats : flowMonitor->GetFlowStats()) {
+        if (flowStats.flowId == flowId) {
+            for (Time time : flowStats.timeFirstRxPacket) {
+                uint64_t rxBytes = flowStats.rxBytes[flowStats.timeFirstRxPacket.index(time)];
+                // Plot only if bytes have increased since last time
+                if (rxBytes > lastRxBytes) {
+                    plotFile << time.GetSeconds() << " " << rxBytes << "\n";
+                    lastRxTime = time;
+                    lastRxBytes = rxBytes;
+                }
+            }
+        }
+    }
+
+    plotFile << "e\n";
+    plotFile.close();
+    gnuplot.Run("received_bytes.plt");
+}
+
+int main(int argc, char *argv[]) {
+    // ... (network setup, mobility, OLSR, and UDP applications)
+
+    // Flow monitor configuration
+    FlowMonitorHelper flowMonitorHelper;
+    Ptr<FlowMonitor> flowMonitor = flowMonitorHelper.InstallAll();
+
+    Simulator::Run();
+
+    flowMonitor->CheckForLostPackets();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowMonitorHelper.GetClassifier());
+    // Find flow ID for n1 -> n2 traffic
+    uint32_t flowId = 0;
+    for (FlowMonitor::FlowStats flowStats : flowMonitor->GetFlowStats()) {
+        if (flowStats.rxBytes > 0 && flowStats.txBytes == 0) {
+            flowId = flowStats.flowId;
+            break;
+        }
+    }
+
+    PlotReceivedBytes(flowMonitor, flowId);
+
+    Simulator::Destroy();
+    return 0;
+}

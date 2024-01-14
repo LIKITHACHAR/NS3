@@ -1,0 +1,49 @@
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/applications-module.h"
+
+using namespace ns3;
+
+int main(int argc, char *argv[]) {
+    NodeContainer nodes;
+    nodes.Create(4);
+
+    PointToPointHelper pointToPoint;
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+    pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
+
+    NetDeviceContainer devices = pointToPoint.Install(nodes);
+
+    InternetStackHelper stack;
+    stack.Install(nodes);
+
+    Ipv4AddressHelper address;
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces = address.Assign(devices);
+
+    // TCP server and client (nodes 0 and 1)
+    uint16_t port = 9;
+
+    // TCP server sending packets (node 1)
+    PacketSinkHelper sink("ns3::TcpSocketFactory", Address(InetSocketAddress(Ipv4Address::GetAny(), port)));
+    ApplicationContainer serverApps = sink.Install(nodes.Get(1));
+    serverApps.Start(Seconds(1.0));
+
+    BulkSendHelper source("ns3::TcpSocketFactory", InetSocketAddress(interfaces.GetAddress(0), port));
+    source.SetAttribute("MaxBytes", UintegerValue(0));
+    ApplicationContainer sourceApps = source.Install(nodes.Get(1));
+    sourceApps.Start(Seconds(2.0));
+    sourceApps.Stop(Seconds(10.0));
+
+    // UDP server and client (nodes 2 and 3)
+    port = 10;
+
+    // UDP server sending packets (node 2)
+    UdpEchoServerHelper echoServer(port);
+    ApplicationContainer udpServerApps = echoServer.Install(nodes.Get(2));
+    udpServerApps.Start(Seconds(1.0));
+
+    // ... (rest of the code)
+}
